@@ -373,84 +373,162 @@ jobs:
   - aggregate:
     - get: gpbackup
       trigger: true
+    - get: gpdb6_src
+    - get: bin_gpdb_6x_stable_centos6
     - get: gpbackup_s3_plugin
     - get: gpbackup-dependencies
     - get: gpbackup_manager_src
+    - get: gpbackup_ddboost_plugin_tagged_src
     - get: nightly-trigger
       trigger: true
-  - task: build-binaries
+  - aggregate:
+    - task: build-go-binaries
+      config:
+        platform: linux
+        inputs:
+          - name: gpbackup-dependencies
+          - name: gpbackup
+            path: go/src/github.com/greenplum-db/gpbackup
+          - name: gpbackup_s3_plugin
+            path: go/src/github.com/greenplum-db/gpbackup-s3-plugin
+          - name: gpbackup_manager_src
+            path: go/src/github.com/pivotal/gp-backup-manager
+        outputs:
+          - name: go_components
+        image_resource:
+          type: docker-image
+          source:
+            repository: golang
+            tag: '1.12.5'
+        run:
+          path: bash
+          args:
+          - -c
+          - |
+            set -ex
+            export GOPATH=$(pwd)/go
+            export PATH=$PATH:$GOPATH/bin
+
+            tar -zxf gpbackup-dependencies/dependencies.tar.gz -C $GOPATH/src/github.com/greenplum-db/gpbackup/
+
+            # Build gpbackup
+            pushd $GOPATH/src/github.com/greenplum-db/gpbackup
+              make depend
+
+              # NOTE: we are building binaries without a cluster installed, so distributing the backup_helper fails--continue anyway
+              CGO_ENABLED=0 make build || true
+              version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
+            popd
+            echo ${version} > go_components/gpbackup_version
+
+            # Build s3 plugin
+            pushd $GOPATH/src/github.com/greenplum-db/gpbackup-s3-plugin
+              make depend
+              CGO_ENABLED=0 make build
+              s3_plugin_version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
+            popd
+            echo ${s3_plugin_version} > go_components/s3_plugin_version
+
+            # gpbackup-manager
+            pushd $GOPATH/src/github.com/pivotal/gp-backup-manager
+              make depend
+              CGO_ENABLED=0 make build
+              gpbackup_manager_version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
+            popd
+            echo ${gpbackup_manager_version} > go_components/gpbackup_manager_version
+
+            cp $GOPATH/bin/gpbackup go_components/
+            cp $GOPATH/bin/gpbackup_helper go_components/
+            cp $GOPATH/bin/gprestore go_components/
+            cp $GOPATH/bin/gpbackup_s3_plugin go_components/
+            cp $GOPATH/bin/gpbackup_manager go_components/
+    - task: build-ddboost
+      params:
+        IVYREPO_USER: {{ivyrepo_user}}
+        IVYREPO_PASSWD: {{ivyrepo_passwd}}
+        IVYREPO_HOST: {{ivyrepo_host}}
+      config:
+        platform: linux
+        inputs:
+          - name: gpbackup_ddboost_plugin_tagged_src
+        outputs:
+          - name: ddboost_components
+        image_resource:
+          type: docker-image
+          source:
+            repository: pivotaldata/centos-gpdb-dev
+            tag: '6-gcc6.2-llvm3.7'
+        run:
+          path: bash
+          args:
+          - -c
+          - |
+            set -ex
+            pushd gpbackup_ddboost_plugin_tagged_src
+              # TODO: remove these steps once ddboost plugin is revved
+              curl -u${IVYREPO_USER}:${IVYREPO_PASSWD} -O "https://${IVYREPO_HOST}/gpdb-ext-release-local/third-party/ext/gpdb5_ext-3.3/targzs/rhel6_x86_64-gpdb5_ext-3.3.targz"
+              curl -u${IVYREPO_USER}:${IVYREPO_PASSWD} -O "https://${IVYREPO_HOST}/gpdb-ext-release-local/emc/DDBoostSDK/3.3.0.4-550644/targzs/DDBoostSDK-rhel5_x86_64-3.3.0.4-550644.targz"
+              tar -xf rhel6_x86_64-gpdb5_ext-3.3.targz
+              tar -xf DDBoostSDK-rhel5_x86_64-3.3.0.4-550644.targz
+              sudo cp rhel6_x86_64/include/yaml.h /usr/local/include/yaml.h
+              sudo cp rhel5_x86_64/include/* /usr/local/include/.
+              sudo cp rhel6_x86_64/lib/libyaml*so* /usr/lib64/.
+              sudo cp rhel5_x86_64/lib/libDDBoost.so /usr/lib64/.
+
+              make build
+              ddboost_plugin_version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
+            popd
+            echo ${ddboost_plugin_version} > ddboost_components/ddboost_plugin_version
+            cp gpbackup_ddboost_plugin_tagged_src/gpbackup_ddboost_plugin ddboost_components/
+  - task: tar-binaries
     config:
       platform: linux
       inputs:
-        - name: gpbackup-dependencies
-        - name: gpbackup
-          path: go/src/github.com/greenplum-db/gpbackup
-        - name: gpbackup_s3_plugin
-          path: go/src/github.com/greenplum-db/gpbackup-s3-plugin
-        - name: gpbackup_manager_src
-          path: go/src/github.com/pivotal/gp-backup-manager
+        - name: go_components
+        - name: ddboost_components
       outputs:
         - name: github_release_components
       image_resource:
         type: docker-image
         source:
-          repository: golang
-          tag: '1.12.5'
+          repository: pivotaldata/centos-gpdb-dev
+          tag: '6-gcc6.2-llvm3.7'
       run:
         path: bash
         args:
         - -c
         - |
           set -ex
-          export GOPATH=$(pwd)/go
-          export PATH=$PATH:$GOPATH/bin
-
-          tar -zxf gpbackup-dependencies/dependencies.tar.gz -C $GOPATH/src/github.com/greenplum-db/gpbackup/
-
-          # Build gpbackup
-          pushd $GOPATH/src/github.com/greenplum-db/gpbackup
-            make depend
-
-            # NOTE: we are building binaries without a cluster installed, so distributing the backup_helper fails--continue anyway
-            CGO_ENABLED=0 make build || true
-            version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
-          popd
-          echo ${version} > gpbackup_version
-
-          # Build s3 plugin
-          pushd $GOPATH/src/github.com/greenplum-db/gpbackup-s3-plugin
-            make depend
-            CGO_ENABLED=0 make build
-            s3_plugin_version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
-          popd
-          echo ${s3_plugin_version} > s3_plugin_version
-
-          # todo handle ddboost in different container
-
-          # gpbackup-manager
-          pushd $GOPATH/src/github.com/pivotal/gp-backup-manager
-            make depend
-            CGO_ENABLED=0 make build
-          popd
-
-          # prepare github release; also, the bin_gpbackup.tar.gz file is used in the next build_gppkg task
           pushd github_release_components
             # Create install script
             printf "#!/bin/sh\nset -x\ntar -xzvf bin_gpbackup.tar.gz -C \$GPHOME" > install_gpdb_component
             chmod +x install_gpdb_component
 
-            # Create test script
-            cp ../gpbackup_version .
-            cp ../gpbackup_version version
-            cp ../s3_plugin_version .
-            cp $GOPATH/src/github.com/greenplum-db/gpbackup/ci/scripts/smoke_test_component_gpbackup.sh smoke_test_gpdb_component
-            # Assemble binaries
+            cp ../go_components/*_version .
+            mv ../go_components/gpbackup_version version
+            cp ../ddboost_components/*_version .
+
             mkdir -p bin
-            cp $GOPATH/bin/gpbackup bin/
-            cp $GOPATH/bin/gpbackup_helper bin/
-            cp $GOPATH/bin/gprestore bin/
-            cp $GOPATH/bin/gpbackup_s3_plugin bin/
-            cp $GOPATH/bin/gpbackup_manager bin/
+            cp ../go_components/gpbackup bin/
+            cp ../go_components/gpbackup_helper bin/
+            cp ../go_components/gprestore bin/
+            cp ../go_components/gpbackup_s3_plugin bin/
+            cp ../go_components/gpbackup_manager bin/
+            cp ../ddboost_components/gpbackup_ddboost_plugin bin/
+            # # Create test script
+            # cp ../gpbackup_version .
+            # cp ../gpbackup_version version
+            # cp ../s3_plugin_version .
+            # cp $GOPATH/src/github.com/greenplum-db/gpbackup/ci/scripts/smoke_test_component_gpbackup.sh smoke_test_gpdb_component
+            # # Assemble binaries
+            # mkdir -p bin
+            # cp $GOPATH/bin/gpbackup bin/
+            # cp $GOPATH/bin/gpbackup_helper bin/
+            # cp $GOPATH/bin/gprestore bin/
+            # cp $GOPATH/bin/gpbackup_s3_plugin bin/
+            # cp $GOPATH/bin/gpbackup_manager bin/
+
+            # need to end up with a folder bin with everything
 
             # Test package
             export PATH=$PATH:`pwd`/bin
@@ -459,8 +537,20 @@ jobs:
 
             tar -czvf bin_gpbackup.tar.gz bin/
 
-            tar -czvf "gpbackup-${version}.tar.gz" bin_gpbackup.tar.gz install_gpdb_component smoke_test_gpdb_component gpbackup_version version s3_plugin_version
+            version=`cat version`
+            tar -czvf "gpbackup-${version}.tar.gz" bin_gpbackup.tar.gz install_gpdb_component gpbackup_version version s3_plugin_version
           popd
+  - task: build_gppkg
+    file: gpbackup/ci/tasks/build-gppkg.yml
+    input_mapping:
+      gpdb_src: gpdb6_src
+      bin_gpdb: bin_gpdb_6x_stable_centos6
+    on_failure:
+      *slack_alert
+
+  - put: gppkgs
+    params:
+      file: gppkgs/gpbackup-gppkgs.tar.gz
 
   - put: github_release_components
     params:
