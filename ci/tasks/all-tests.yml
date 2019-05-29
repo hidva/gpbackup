@@ -11,6 +11,7 @@ inputs:
   path: go/src/github.com/greenplum-db/gpbackup
 - name: ccp_src
 - name: cluster_env_files
+- name: gppkgs
 
 run:
   path: bash
@@ -25,6 +26,8 @@ run:
     set -ex
     source env.sh
 
+    gppkg -i gpbackup*gp*.gppkg
+
     cd \$GOPATH/src/github.com/greenplum-db/gpbackup
     export OLD_BACKUP_VERSION="$GPBACKUP_VERSION"
 
@@ -32,6 +35,12 @@ run:
     make integration
     make end_to_end
     SCRIPT
+
+    out=`ssh -t mdw 'source env.sh && psql postgres -c "select version();"'`
+    gpdbversion=`echo $out | sed -n 's/.*Greenplum Database \([0-9]\).*/\1/p'`
+    mkdir /tmp/untarred
+    tar -xzf gppkgs/gpbackup-gppkgs.tar.gz -C /tmp/untarred
+    scp /tmp/untarred/gpbackup*gp$gpdbversion*.gppkg mdw:/home/gpadmin
 
     chmod +x /tmp/run_tests.bash
     scp /tmp/run_tests.bash mdw:/home/gpadmin/run_tests.bash
