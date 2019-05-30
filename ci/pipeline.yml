@@ -1071,7 +1071,6 @@ jobs:
     - get: centos6-image
     - get: centos7-image
     - get: gpbackup
-      trigger: true
     - get: gpbackup-dependencies
       passed:
        - build_dependencies
@@ -1081,6 +1080,10 @@ jobs:
 #    - get: nightly-trigger
 #      trigger: true
     - get: dummy_seclabel_linux_gpdb6
+    - get: gppkgs
+      trigger: true
+      passed:
+      - build_binaries
   - aggregate:
     - task: run-tests-locally-centos6
       image: centos6-image
