@@ -26,8 +26,15 @@ run:
     set -ex
     source env.sh
 
-    gppkg -i gpbackup*gp*.gppkg
-
+    # only install if not installed already
+    is_installed_output=`gppkg -q gpbackup*gp*.gppkg`
+    set +e
+    echo \$is_installed_output | grep 'is installed'
+    if [ \$? -ne 0 ] ; then
+      set -e
+      gppkg -i gpbackup*gp*.gppkg
+    fi
+    set -e
     cd \$GOPATH/src/github.com/greenplum-db/gpbackup
     export OLD_BACKUP_VERSION="$GPBACKUP_VERSION"
 
