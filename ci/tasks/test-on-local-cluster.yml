@@ -65,26 +65,24 @@ run:
     fi
 
     # Install gpbackup gppkg
-    pushd ~/
-      out=`psql postgres -c "select version();"`
-      gpdbversion=`echo $out | sed -n 's/.*Greenplum Database \([0-9]\).*/\1/p'`
-      mkdir /tmp/untarred
-      tar -xzf gppkgs/gpbackup-gppkgs.tar.gz -C /tmp/untarred
-    popd
+    out=\$(psql postgres -c "select version();")
+    gpdbversion=\$(echo \$out | sed -n 's/.*Greenplum Database \([0-9]\).*/\1/p')
+    mkdir /tmp/untarred
+    tar -xzf gppkgs/gpbackup-gppkgs.tar.gz -C /tmp/untarred
     
     # only install if not installed already
-    is_installed_output=`gppkg -q /tmp/untarred/gpbackup*gp$gpdbversion*.gppkg`
+    is_installed_output=\$(gppkg -q /tmp/untarred/gpbackup*gp\$gpdbversion*.gppkg)
     set +e
     echo \$is_installed_output | grep 'is installed'
     if [ \$? -ne 0 ] ; then
       set -e
-      gppkg -i /tmp/untarred/gpbackup*gp$gpdbversion*.gppkg
+      gppkg -i /tmp/untarred/gpbackup*gp\$gpdbversion*.gppkg
     fi
     set -e
     
     # Build gpbackup
     pushd \$GOPATH/src/github.com/greenplum-db/gpbackup
-      # make depend
+      make depend
       # make build
       make unit
       make integration
@@ -93,5 +91,6 @@ run:
 
     SCRIPT
 
+    cp -r gppkgs /home/gpadmin
     chmod +x /tmp/run_tests.bash
     su - gpadmin bash -c /tmp/run_tests.bash
