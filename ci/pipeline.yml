@@ -424,6 +424,8 @@ jobs:
             set -ex
             export GOPATH=$(pwd)/go
             export PATH=$PATH:$GOPATH/bin
+            mkdir -p $GOPATH/bin
+            mkdir -p $GOPATH/src
 
             tar -zxf gpbackup-dependencies/dependencies.tar.gz -C $GOPATH/src/github.com/greenplum-db/gpbackup/
 
@@ -432,7 +434,7 @@ jobs:
               make depend
 
               # NOTE: we are building binaries without a cluster installed, so distributing the backup_helper fails--continue anyway
-              CGO_ENABLED=0 make build || true
+              make build || true
               version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
             popd
             echo ${version} > go_components/gpbackup_version
@@ -440,7 +442,7 @@ jobs:
             # Build s3 plugin
             pushd $GOPATH/src/github.com/greenplum-db/gpbackup-s3-plugin
               make depend
-              CGO_ENABLED=0 make build
+              make build
               s3_plugin_version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
             popd
             echo ${s3_plugin_version} > go_components/s3_plugin_version
@@ -448,7 +450,7 @@ jobs:
             # gpbackup-manager
             pushd $GOPATH/src/github.com/pivotal/gp-backup-manager
               make depend
-              CGO_ENABLED=0 make build
+              make build
               gpbackup_manager_version=`git describe --tags | perl -pe 's/(.*)-([0-9]*)-(g[0-9a-f]*)/\1+dev.\2.\3/'`
             popd
             echo ${gpbackup_manager_version} > go_components/gpbackup_manager_version
@@ -473,6 +475,7 @@ jobs:
           type: docker-image
           source:
             repository: pivotaldata/centos-gpdb-dev
+            # important: use centos6 image to ensure older libc for compilation of ddboost binary
             tag: '6-gcc6.2-llvm3.7'
         run:
           path: bash
