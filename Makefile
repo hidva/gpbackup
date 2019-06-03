@@ -25,8 +25,8 @@ CUSTOM_BACKUP_DIR ?= "/tmp"
 .PHONY : coverage integration end_to_end
 
 dependencies :
-		go get github.com/alecthomas/gometalinter
-		gometalinter --install
+#		go get github.com/alecthomas/gometalinter
+#		gometalinter --install
 		curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
 		dep ensure -v
 		@cd vendor/golang.org/x/tools/cmd/goimports; go install .
@@ -45,7 +45,7 @@ unit :
 integration :
 		ginkgo -r -randomizeSuites -noisySkippings=false -randomizeAllSpecs integration 2>&1
 
-test : lint unit integration
+test : unit integration
 
 end_to_end :
 		ginkgo -r -randomizeSuites -slowSpecThreshold=10 -noisySkippings=false -randomizeAllSpecs end_to_end -- --custom_backup_dir $(CUSTOM_BACKUP_DIR) 2>&1
