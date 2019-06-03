@@ -34,12 +34,13 @@ run:
     ENV_SCRIPT
 
     export GOPATH=/home/gpadmin/go
+    mkdir -p \$GOPATH/bin
     chown gpadmin:gpadmin -R \$GOPATH
     chmod +x env.sh
     source env.sh
     gpconfig --skipvalidation -c fsync -v off
     gpstop -u
-          
+
     tar -zxf gpbackup-dependencies/dependencies.tar.gz -C \$GOPATH/src/github.com/greenplum-db/gpbackup/
 
     pushd \$GOPATH/src/github.com/greenplum-db/gpbackup
