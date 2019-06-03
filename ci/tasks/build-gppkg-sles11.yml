@@ -27,6 +27,8 @@ run:
 
     source gpdb_src/concourse/scripts/common.bash
 
+    export TEST_OS=sles
+
     ### Setup local cluster
     # replaced `install_and_configure_gpdb` call to modify the `configure` method
     time install_gpdb
@@ -38,7 +40,7 @@ run:
     pushd gpdb_src
       ./configure --prefix=/usr/local/greenplum-db-devel --with-python --with-libxml --disable-orca ${CONFIGURE_FLAGS}
     popd
-    gpdb_src/concourse/scripts/setup_gpadmin_user.bash sles
+    gpdb_src/concourse/scripts/setup_gpadmin_user.bash $TEST_OS
     time make_cluster
 
     ### Create gppkgs
