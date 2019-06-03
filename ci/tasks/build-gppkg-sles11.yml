@@ -31,13 +31,14 @@ run:
     # replaced `install_and_configure_gpdb` call to modify the `configure` method
     time install_gpdb
     time setup_configure_vars
-    # NOTE: we had to remove the `--enable-tap-tests` because of a configure error. 
+    # NOTE: we had to remove the `--enable-tap-tests` because of a configure error.
     # configure: error: Perl modules IPC::Run and Test::More 0.82 are required to run TAP tests
     source /opt/gcc_env.sh
+
     pushd gpdb_src
-      ./configure --prefix=/usr/local/greenplum-db-devel --with-perl --with-python --with-libxml --enable-mapreduce --enable-orafce --disable-orca ${CONFIGURE_FLAGS}
+      ./configure --prefix=/usr/local/greenplum-db-devel --with-python --with-libxml --disable-orca ${CONFIGURE_FLAGS}
     popd
-    gpdb_src/concourse/scripts/setup_gpadmin_user.bash centos
+    gpdb_src/concourse/scripts/setup_gpadmin_user.bash sles
     time make_cluster
 
     ### Create gppkgs
