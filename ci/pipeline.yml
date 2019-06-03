@@ -87,6 +87,13 @@ resources:
     repository: pivotaldata/centos-gpdb-dev
     tag: '6-gcc6.2-llvm3.7'
 
+- name: sles11-image
+  type: docker-image
+  source:
+    repository: pivotaldata/sles-gpdb-dev
+    tag: 11-beta
+
+
 ##### Other Resources #####
 #- name: nightly-trigger
 #  type: time
@@ -220,6 +227,15 @@ resources:
       region_name: us-west-2
       access_key_id: {{bucket-access-key-id}}
       secret_access_key: {{bucket-secret-access-key}}
+
+- name: bin_gpdb_5x_stable_sles11
+  type: s3
+  source:
+    access_key_id: {{bucket-access-key-id}}
+    bucket: gpdb5-stable-concourse-builds
+    region_name: {{aws-region}}
+    secret_access_key: {{bucket-secret-access-key}}
+    versioned_file: bin_gpdb_sles11/bin_gpdb.tar.gz
 
 - name: bin_gpdb_6x_stable_centos6
   type: gcs
@@ -859,41 +875,27 @@ jobs:
 - name: GPDB5-sles11
   plan:
   - aggregate:
+    - get: sles11-image
     - get: gpbackup
-      trigger: true
-    - get: bin_gpdb_5x_stable_centos6
-    - get: ccp_src
-    - get: gpdb5_src
-#    - get: nightly-trigger
-#      trigger: true
     - get: gpbackup-dependencies
       passed:
        - build_dependencies
-  - put: terraform
-    params:
-      <<: *ccp_default_params
-      vars:
-        <<: *ccp_default_vars
-        PLATFORM: sles12
-        default_image_user: root
-  - task: gen_cluster
-    params:
-      <<: *ccp_gen_cluster_default_params
-      PLATFORM: sles12
-    file: ccp_src/ci/tasks/gen_cluster.yml
+    - get: bin_gpdb_5x_stable_sles11
+    - get: gpdb5_src
+#    - get: nightly-trigger
+#      trigger: true
+    - get: gppkgs
+      trigger: true
+      passed:
+      - build_binaries
+  - task: run-tests-locally-sles11
+    image: sles11-image
+    file: gpbackup/ci/tasks/test-on-local-cluster.yml
     input_mapping:
-      gpdb_binary: bin_gpdb_5x_stable_centos6
       gpdb_src: gpdb5_src
-  - task: gpinitsystem
-    file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: integration-tests
-    file: gpbackup/ci/tasks/sles-tests.yml
-  on_success:
-    <<: *ccp_destroy
+      bin_gpdb: bin_gpdb_5x_stable_sles11
   on_failure:
     *slack_alert
-  ensure:
-    <<: *set_failed
 
 - name: GPDB5-oracle7
   plan:
