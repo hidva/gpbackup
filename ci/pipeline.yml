@@ -564,16 +564,21 @@ jobs:
     input_mapping:
       gpdb_src: gpdb6_src
       bin_gpdb: bin_gpdb_6x_stable_centos6
-    on_failure:
-      *slack_alert
-
+  # Task duplication because there are rpm issues building a gppkg on centos6 and intalling it on sles11
+  - task: build_gppkg_sles11
+    file: gpbackup/ci/tasks/build-gppkg-sles11.yml
+    input_mapping:
+      gppkgs-inputs: gppkgs
+      gpdb_src: gpdb6_src
+      bin_gpdb: bin_gpdb_6x_stable_centos6
   - put: gppkgs
     params:
       file: gppkgs/gpbackup-gppkgs.tar.gz
-
   - put: github_release_components
     params:
       file: github_release_components/gpbackup-*.tar.gz
+  on_failure:
+    *slack_alert
 
 
 - name: build_dependencies

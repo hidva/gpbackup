@@ -1,0 +1,88 @@
+PLATFORM: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: pivotaldata/sles-gpdb-dev
+    tag: 11-beta
+
+inputs:
+- name: github_release_components
+- name: gpbackup
+- name: gpdb_src
+- name: bin_gpdb
+- name: gppkgs-inputs
+
+outputs:
+- name: gppkgs
+
+run:
+  path: bash
+  args:
+  - -c
+  - |
+    set -ex
+
+    mv bin_gpdb/{*.tar.gz,bin_gpdb.tar.gz}
+
+    source gpdb_src/concourse/scripts/common.bash
+
+    ### Setup local cluster
+    # replaced `install_and_configure_gpdb` call to modify the `configure` method
+    time install_gpdb
+    time setup_configure_vars
+    # NOTE: we had to remove the `--enable-tap-tests` because of a configure error. 
+    # configure: error: Perl modules IPC::Run and Test::More 0.82 are required to run TAP tests
+    source /opt/gcc_env.sh
+    pushd gpdb_src
+      ./configure --prefix=/usr/local/greenplum-db-devel --with-perl --with-python --with-libxml --enable-mapreduce --enable-orafce --disable-orca ${CONFIGURE_FLAGS}
+    popd
+    gpdb_src/concourse/scripts/setup_gpadmin_user.bash centos
+    time make_cluster
+
+    ### Create gppkgs
+    cat <<EOF > gpadmin_cmds.sh
+      set -ex
+
+      source gpdb_src/gpAux/gpdemo/gpdemo-env.sh
+      source /usr/local/greenplum-db-devel/greenplum_path.sh
+      export GOPATH=/home/gpadmin/go
+
+      GPBACKUP_VERSION=\$(cat github_release_components/gpbackup_version)
+      ./gpbackup/ci/scripts/gpbackup_rpm.sh \$GPBACKUP_VERSION github_release_components/bin_gpbackup.tar.gz
+      # gpdb 4 gppkgs must have 'orca' in its version because of the version validation done on the name
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 4.3orca rhel5
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 4 sles11
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 5 rhel6
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 5 rhel7
+      ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 5 sles11
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 5 sles12
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 6 rhel6
+      # ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 6 rhel7
+
+      DDBOOST_PLUGIN_VERSION=\$(cat github_release_components/ddboost_plugin_version)
+      ./gpbackup/ci/scripts/ddboost_rpm.sh \$DDBOOST_PLUGIN_VERSION github_release_components/bin_gpbackup.tar.gz
+      # ./gpbackup/ci/scripts/ddboost_gppkg.sh \$DDBOOST_PLUGIN_VERSION 6 rhel6
+      # ./gpbackup/ci/scripts/ddboost_gppkg.sh \$DDBOOST_PLUGIN_VERSION 6 rhel7
+      ./gpbackup/ci/scripts/ddboost_gppkg.sh \$DDBOOST_PLUGIN_VERSION 5 sles11
+
+      S3_PLUGIN_VERSION=\$(cat github_release_components/s3_plugin_version)
+      ./gpbackup/ci/scripts/s3_rpm.sh \$S3_PLUGIN_VERSION github_release_components/bin_gpbackup.tar.gz
+      # ./gpbackup/ci/scripts/s3_gppkg.sh \$S3_PLUGIN_VERSION 6 rhel6
+      # ./gpbackup/ci/scripts/s3_gppkg.sh \$S3_PLUGIN_VERSION 6 rhel7
+      ./gpbackup/ci/scripts/s3_gppkg.sh \$S3_PLUGIN_VERSION 5 sles11
+    EOF
+    chown gpadmin:gpadmin .
+    chmod +x gpadmin_cmds.sh
+    su gpadmin -c ./gpadmin_cmds.sh
+
+    mv gpbackup_gppkg/* gppkgs/
+    mv ddboost_gppkg/* gppkgs/
+    mv s3_gppkg/* gppkgs/
+
+    cp github_release_components/gpbackup_version gppkgs/
+    cp github_release_components/ddboost_plugin_version gppkgs/
+    cp github_release_components/s3_plugin_version gppkgs/
+    pushd gppkgs
+      tar cvfz gpbackup-gppkgs.tar.gz *.gppkg *version*
+    popd
