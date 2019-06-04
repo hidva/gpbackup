@@ -900,7 +900,9 @@ jobs:
   on_success:
     <<: *ccp_destroy
   on_failure:
-    *slack_alert
+    do:
+    - *slack_alert
+    - *ddboost_debug_sleep
   ensure:
     <<: *set_failed
 
