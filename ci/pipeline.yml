@@ -865,7 +865,7 @@ jobs:
   plan:
   - aggregate:
     - get: gpbackup
-      trigger: true
+      # trigger: true
     - get: bin_gpdb_5x_stable_centos6
     - get: ccp_src
     - get: gpdb5_src
@@ -874,6 +874,10 @@ jobs:
     - get: gpbackup-dependencies
       passed:
        - build_dependencies
+    - get: gppkgs
+      trigger: true
+      passed:
+      - build_binaries
   - put: terraform
     params:
       <<: *ccp_default_params

@@ -47,6 +47,7 @@ run:
     gpdbversion=`echo $out | sed -n 's/.*Greenplum Database \([0-9]\).*/\1/p'`
     mkdir /tmp/untarred
     tar -xzf gppkgs/gpbackup-gppkgs.tar.gz -C /tmp/untarred
+    # TODO: this is broken until we figure out how to determine the OS
     scp /tmp/untarred/gpbackup*gp$gpdbversion*.gppkg mdw:/home/gpadmin
 
     chmod +x /tmp/run_tests.bash

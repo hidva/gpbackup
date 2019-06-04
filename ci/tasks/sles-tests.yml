@@ -12,6 +12,7 @@ inputs:
 - name: ccp_src
 - name: cluster_env_files
 - name: gpbackup-dependencies
+- name: gppkgs
 
 run:
   path: bash
@@ -23,23 +24,31 @@ run:
     ccp_src/scripts/setup_ssh_to_cluster.sh
 
     cat <<SCRIPT > /tmp/run_tests.bash
-    set -ex
-    export GOPATH=/home/gpadmin/go
-    export PGPORT=5432
-    export MASTER_DATA_DIRECTORY=/data/gpdata/master/gpseg-1
-    export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
-    
-    tar -zxf gpbackup-dependencies/dependencies.tar.gz -C \$GOPATH/src/github.com/greenplum-db/gpbackup/
-    
-    cd \$GOPATH/src/github.com/greenplum-db/gpbackup
-    mkdir -p /home/gpadmin/go/bin
-    make depend
-    source /usr/local/greenplum-db-devel/greenplum_path.sh # We source greenplum_path.sh here to avoid certificate issues during `go get`
-    export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
-    make build
-    make end_to_end
+      set -ex
+      source env.sh
+      gppkg -i gpbackup*.gppkg
+
+      export GOPATH=/home/gpadmin/go
+      export PGPORT=5432
+      export MASTER_DATA_DIRECTORY=/data/gpdata/master/gpseg-1
+      export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
+
+      tar -zxf gpbackup-dependencies/dependencies.tar.gz -C \$GOPATH/src/github.com/greenplum-db/gpbackup/
+
+      cd \$GOPATH/src/github.com/greenplum-db/gpbackup
+      mkdir -p /home/gpadmin/go/bin
+      make depend
+      source /usr/local/greenplum-db-devel/greenplum_path.sh # We source greenplum_path.sh here to avoid certificate issues during `go get`
+      export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
+      make build
+      make end_to_end
     SCRIPT
 
+    mkdir /tmp/untarred
+    tar -xzf gppkgs/gpbackup-gppkgs.tar.gz -C /tmp/untarred
+    scp /tmp/untarred/gpbackup*gp5-sles11*.gppkg mdw:/home/gpadmin
+
+    # TODO: update this golang
     ssh -t root@mdw "sudo zypper -n install wget git && wget https://storage.googleapis.com/golang/go1.10.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.10.3.linux-amd64.tar.gz"
     ssh -t root@mdw "sudo mkdir /home/gpadmin/go && sudo chown gpadmin:gpadmin -R /home/gpadmin/go"
     chmod +x /tmp/run_tests.bash
