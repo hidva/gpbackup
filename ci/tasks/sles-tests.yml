@@ -7,11 +7,15 @@ image_resource:
     tag: 11-beta
 
 inputs:
+- name: github_release_components
 - name: gpbackup
   path: go/src/github.com/greenplum-db/gpbackup
 - name: ccp_src
 - name: cluster_env_files
 - name: gpbackup-dependencies
+
+output:
+- name: gppkgs-sles11
 
 run:
   path: bash
@@ -31,20 +35,42 @@ run:
       
       tar -zxf gpbackup-dependencies/dependencies.tar.gz -C \$GOPATH/src/github.com/greenplum-db/gpbackup/
       
-      cd \$GOPATH/src/github.com/greenplum-db/gpbackup
-      mkdir -p /home/gpadmin/go/bin
-      make depend
-      source /usr/local/greenplum-db-devel/greenplum_path.sh # We source greenplum_path.sh here to avoid certificate issues during `go get`
-      export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
-      make build
-      make end_to_end
+      pushd \$GOPATH/src/github.com/greenplum-db/gpbackup
+        mkdir -p /home/gpadmin/go/bin
+        make depend
+        source /usr/local/greenplum-db-devel/greenplum_path.sh # We source greenplum_path.sh here to avoid certificate issues during `go get`
+        export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
+        make build
+        make end_to_end
+      popd
+
+      GPBACKUP_VERSION=\$(cat github_release_components/gpbackup_version)
+      ./gpbackup/ci/scripts/gpbackup_rpm.sh \$GPBACKUP_VERSION github_release_components/bin_gpbackup.tar.gz
+      ./gpbackup/ci/scripts/gpbackup_gppkg.sh \$GPBACKUP_VERSION 5 sles11
+
+      DDBOOST_PLUGIN_VERSION=\$(cat github_release_components/ddboost_plugin_version)
+      ./gpbackup/ci/scripts/ddboost_rpm.sh \$DDBOOST_PLUGIN_VERSION github_release_components/bin_gpbackup.tar.gz
+      ./gpbackup/ci/scripts/ddboost_gppkg.sh \$DDBOOST_PLUGIN_VERSION 5 sles11
+
+      S3_PLUGIN_VERSION=\$(cat github_release_components/s3_plugin_version)
+      ./gpbackup/ci/scripts/s3_rpm.sh \$S3_PLUGIN_VERSION github_release_components/bin_gpbackup.tar.gz
+      ./gpbackup/ci/scripts/s3_gppkg.sh \$S3_PLUGIN_VERSION 5 sles11
+
+      # create gppkgs for sles11
+      mkdir gppkgs
+      mv gpbackup_gppkg/* gppkgs/
+      mv ddboost_gppkg/* gppkgs/
+      mv s3_gppkg/* gppkgs/
     SCRIPT
 
     ssh -t root@mdw "sudo zypper -n install wget git && wget https://storage.googleapis.com/golang/go1.10.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.10.3.linux-amd64.tar.gz"
     ssh -t root@mdw "sudo mkdir /home/gpadmin/go && sudo chown gpadmin:gpadmin -R /home/gpadmin/go"
+    scp -r github_release_components mdw:/home/gpadmin/
     chmod +x /tmp/run_tests.bash
     rsync -a gpbackup-dependencies mdw:/home/gpadmin
     scp /tmp/run_tests.bash mdw:/home/gpadmin/run_tests.bash
     ssh -t mdw "mkdir -p /home/gpadmin/go/src/github.com/greenplum-db"
     scp -r go/src/github.com/greenplum-db/gpbackup mdw:/home/gpadmin/go/src/github.com/greenplum-db/gpbackup
     ssh -t mdw "bash /home/gpadmin/run_tests.bash"
+
+    scp -r mdw:/home/gpadmin/gppkgs/* gppkgs-sles11/
