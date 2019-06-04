@@ -32,6 +32,7 @@ run:
     tar -zxf gpbackup-dependencies/dependencies.tar.gz -C \$GOPATH/src/github.com/greenplum-db/gpbackup/
     
     cd \$GOPATH/src/github.com/greenplum-db/gpbackup
+    mkdir -p /home/gpadmin/go/bin
     make depend
     source /usr/local/greenplum-db-devel/greenplum_path.sh # We source greenplum_path.sh here to avoid certificate issues during `go get`
     export PATH=\$GOPATH/bin:/usr/local/go/bin:\$PATH
