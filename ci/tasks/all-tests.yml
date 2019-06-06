@@ -11,6 +11,8 @@ inputs:
   path: go/src/github.com/greenplum-db/gpbackup
 - name: ccp_src
 - name: cluster_env_files
+- name: pgcrypto43
+  optional: true
 
 run:
   path: bash
@@ -30,6 +32,7 @@ run:
 
     make unit
     make integration
+    # exit 1
     make end_to_end
     SCRIPT
 

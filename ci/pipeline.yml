@@ -182,6 +182,16 @@ resources:
       access_key_id: {{bucket-access-key-id}}
       secret_access_key: {{bucket-secret-access-key}}
 
+- name: pgcrypto43
+  type: s3
+  source:
+      bucket: pgcrypto43
+      access_key_id: {{bucket-access-key-id}}
+      region_name: {{aws-region}}
+      secret_access_key: {{bucket-secret-access-key}}
+      regexp: pgcrypto-ossv1.1_pv(.*)_gpdb4.3orca-rhel5-x86_64.gppkg
+
+
 - name: dummy_seclabel_linux_gpdb6
   type: gcs
   source:
@@ -835,6 +845,7 @@ jobs:
     - get: gpbackup-dependencies
       passed:
        - build_dependencies
+    - get: pgcrypto43
   - put: terraform
     params:
       <<: *ccp_default_params
