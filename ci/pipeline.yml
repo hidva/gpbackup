@@ -1457,7 +1457,7 @@ jobs:
               GPBACKUP_VERSION=$(cat workspace/files-to-upload/gpbackup_version)
 
               pushd pivnet_release_cache
-                PRV_TILE_RELEASE_VERSION="v-${GPBACKUP_VERSION}-*"
+                PRV_TILE_RELEASE_VERSION="v-${GPBACKUP_VERSION}*"
                 if [ -f $PRV_TILE_RELEASE_VERSION ]; then
                   # increment the counter if the expected release version has been used before
                   COUNT=$(echo $PRV_TILE_RELEASE_VERSION | sed -n "s/v-${GPBACKUP_VERSION}-\([0-9]*\).*/\1/p")

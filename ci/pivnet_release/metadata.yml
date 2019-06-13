@@ -8,12 +8,17 @@ release:
   controlled: false
   eccn: 5D002
   license_exception: ENC
+
+# the `id` field has been added to enable file_groups. They follow the form: `<group_num><product_num><gpdb_version><OS_version>`
+#   - We've arbitrarily assigned the following product_num mappings: {backup: 0, ddboost: 1, s3: 2}
+
 product_files:
 ########## Gpbackup Pkgs ##########
 - file: workspace/files-to-upload/gpbackup-gp4.3orca-rhel5-x86_64-<TILE_RELEASE_VERSION>.gppkg
   upload_as: Pivotal Greenplum Backup and Restore v<GPBAR_VERSION> [GP4-RHEL5]
   file_type: Software
   file_version: <GPBAR_VERSION>
+  id: 0045
 # - file: workspace/files-to-upload/gpbackup-gp4-sles11-x86_64-<TILE_RELEASE_VERSION>.gppkg
 #   upload_as: Pivotal Greenplum Backup and Restore v<GPBAR_VERSION> [GP4-SLES11]
 #   file_type: Software
@@ -22,6 +27,7 @@ product_files:
   upload_as: Pivotal Greenplum Backup and Restore v<GPBAR_VERSION> [GP5-RHEL6]
   file_type: Software
   file_version: <GPBAR_VERSION>
+  id: 0056
 # - file: workspace/files-to-upload/gpbackup-gp5-rhel7-x86_64-<TILE_RELEASE_VERSION>.gppkg
 #   upload_as: Pivotal Greenplum Backup and Restore v<GPBAR_VERSION> [GP5-RHEL7]
 #   file_type: Software
@@ -38,6 +44,7 @@ product_files:
   upload_as: Pivotal Greenplum Backup and Restore v<GPBAR_VERSION> [GP6-RHEL6]
   file_type: Software
   file_version: <GPBAR_VERSION>
+  id: 0066
 # - file: workspace/files-to-upload/gpbackup-gp6-rhel7-x86_64-<TILE_RELEASE_VERSION>.gppkg
 #   upload_as: Pivotal Greenplum Backup and Restore v<GPBAR_VERSION> [GP6-RHEL7]
 #   file_type: Software
@@ -48,20 +55,24 @@ product_files:
   upload_as: Pivotal Greenplum Backup and Restore DDBOOST plugin v<DDBOOST_PLUGIN_VERSION> [GP6-RHEL6]
   file_type: Software
   file_version: <DDBOOST_PLUGIN_VERSION>
+  id: 1166
 - file: workspace/files-to-upload/ddboost-<DDBOOST_PLUGIN_VERSION>-gp6-rhel7-x86_64-<TILE_RELEASE_VERSION>.gppkg
   upload_as: Pivotal Greenplum Backup and Restore DDBOOST plugin v<DDBOOST_PLUGIN_VERSION> [GP6-RHEL7]
   file_type: Software
   file_version: <DDBOOST_PLUGIN_VERSION>
+  id: 1167
 
 ########## S3 Plugin Pkgs ##########
 - file: workspace/files-to-upload/s3-<S3_PLUGIN_VERSION>-gp6-rhel6-x86_64-<TILE_RELEASE_VERSION>.gppkg
   upload_as: Pivotal Greenplum Backup and Restore S3 plugin v<S3_PLUGIN_VERSION> [GP6-RHEL6]
   file_type: Software
   file_version: <S3_PLUGIN_VERSION>
+  id: 1266
 - file: workspace/files-to-upload/s3-<S3_PLUGIN_VERSION>-gp6-rhel7-x86_64-<TILE_RELEASE_VERSION>.gppkg
   upload_as: Pivotal Greenplum Backup and Restore S3 plugin v<S3_PLUGIN_VERSION> [GP6-RHEL7]
   file_type: Software
   file_version: <S3_PLUGIN_VERSION>
+  id: 1267
 
 ########## License ##########
 - file: workspace/files-to-upload/gpbackup-osl-v<GPBAR_VERSION>.txt
@@ -73,3 +84,16 @@ product_files:
   platforms:
   included_files:
   file_version: <GPBAR_VERSION>
+
+file_groups:
+- name: "Backup and Restore"
+  product_files:
+  - id: 0045
+  - id: 0056
+  - id: 0066
+- name: "Plugins"
+  product_files:
+  - id: 1166
+  - id: 1167
+  - id: 1266
+  - id: 1267
