@@ -359,17 +359,13 @@ resources:
       bucket: gpdb5-pipeline-dynamic-terraform
       bucket_path: clusters-aws/
 
-- name: pivnet-gpbackup
-  type: pivnet
+- name: pivnet_client
+  type: git
   source:
-    api_token: ((pivnet_api_token))
-    product_slug: ((pivnet_product_slug))
-    endpoint: ((pivnet_endpoint))
-    bucket: ((pivnet_bucket_name))
-    access_key_id: ((pivnet_bucket_access_key_id))
-    secret_access_key: ((pivnet_bucket_secret_access_key))
-    region: ((pivnet_aws_region))
-    sort_by: semver
+    branch: {{pivnet-client-branch}}
+    private_key: {{pivnet-client-remote-deploy-key}}
+    uri: {{pivnet-client-git-remote}}
+    tag_filter: {{pivnet-client-version}}
 
 - name: gpbackup-release-license
   type: gcs
@@ -1432,6 +1428,7 @@ jobs:
         # passed: [gppkgs_smoketest]
       - get: gpbackup-release-license
       - get: pivnet_release_cache
+      - get: pivnet_client
     - task: update metadata.yml
       config:
         platform: linux
@@ -1451,6 +1448,7 @@ jobs:
           args:
             - -exc
             - |
+
               mkdir workspace/files-to-upload
               cp gpbackup/ci/pivnet_release/metadata.yml workspace/
               tar xzf gppkgs/gpbackup-gppkgs.tar.gz -C workspace/files-to-upload/
@@ -1497,18 +1495,53 @@ jobs:
               done
               popd
 
+              echo ${TILE_RELEASE_VERSION} > workspace/tile_release_version
               rm workspace/files-to-upload/*_version
               ls -l workspace/files-to-upload
+
+    - task: push-to-pivnet
+      config:
+        platform: linux
+        image_resource:
+          type: docker-image
+          source:
+            repository: ruby
+            tag: '2.5'
+        inputs:
+          - name: pivnet_client
+          - name: workspace
+        params:
+          PIVNET_ENDPOINT: ((pivnet_endpoint))
+          PIVNET_REFRESH_TOKEN: ((pivnet_api_token))
+          PIVNET_PRODUCT_SLUG: ((pivnet_product_slug)) 
+          PIVNET_BUCKET_ACCESS_KEY_ID: ((pivnet_bucket_access_key_id))
+          PIVNET_BUCKET_SECRET_ACCESS_KEY: ((pivnet_bucket_secret_access_key))
+          PIVNET_BUCKET_AWS_REGION: ((pivnet_aws_region))
+          PIVNET_BUCKET_NAME: ((pivnet_bucket_name))
+          # TODO: Not sure if the params below are needed
+          PIVNET_S3_FILEPATH_PREFIX: {{5_0-release_pivnet_s3-filepath-prefix}}
+          BUCKET_ACCESS_KEY_ID: {{bucket-access-key-id}}
+          BUCKET_SECRET_ACCESS_KEY: {{bucket-secret-access-key}}
+          BUCKET_AWS_REGION: {{aws-region}}
+
+          # api_token: ((pivnet_api_token))
+
+        run:
+          path: bash
+          args:
+            - -exc
+            - |
+              TILE_RELEASE_VERSION=$(cat workspace/tile_release_version)
+ 
+              # upload to pivnet using the pivnet client
+              pushd pivnet_client/
+                bundle install
+                bundle exec pivnet_client upload --verbose --metadata ../workspace/metadata.yml --search_path ../ --gpdb_version ${TILE_RELEASE_VERSION}
+              popd
 
     - put: pivnet_release_cache
       params:
         file: workspace/v-*
-
-    - put: pivnet-gpbackup
-      params:
-        metadata_file: workspace/metadata.yml
-        file_glob: workspace/files-to-upload/*
-        s3_filepath_prefix: ((pivnet_s3_filepath_prefix))
 
 ccp_default_params_anchor: &ccp_default_params
   action: create
