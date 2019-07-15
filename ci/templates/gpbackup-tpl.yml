@@ -30,11 +30,13 @@ groups:
   jobs:
   - GPDB4.3
   - ddboost_plugin_and_boostfs_tests_43
+  - scale-43
 - name: GPDB5
   jobs:
   - GPDB5
   - GPDB5-oracle7
   - GPDB5-sles11
+  - scale-5x
 {% if "gpbackup-release" != pipeline_name %}
   - 5X-head-gpbackup-fixed-test
 {% endif %}
@@ -44,10 +46,12 @@ groups:
 - name: GPDB6
   jobs:
   - GPDB6
+  - scale-6x
 {% if "gpbackup-release" != pipeline_name %}
 - name: Master
   jobs:
   - master
+  - scale-master
 {% endif %}
 - name: Scale
   jobs:
