@@ -25,6 +25,7 @@ func validateFilterLists(opts *options.Options) {
 	ValidateSchemasExist(connectionPool, opts.GetExcludedSchemas(), true)
 }
 
+/* 同 DBValidate 类似, 只不过是验证 schema 是否存在. */
 func ValidateSchemasExist(connectionPool *dbconn.DBConn, schemaList []string, excludeSet bool) {
 	if len(schemaList) == 0 {
 		return
@@ -47,6 +48,10 @@ func ValidateSchemasExist(connectionPool *dbconn.DBConn, schemaList []string, ex
 	}
 }
 
+/* 验证 tableList 中表名是否存在.
+ * tableList, 此时应该是 schema.name 这种格式.
+ * excludeSet, 控制着当表名不存在时报错行为. 若为 true, 则此时输出 warning, 否则输出 fatal.
+ */
 func ValidateTablesExist(conn *dbconn.DBConn, tableList []string, excludeSet bool) {
 	if len(tableList) == 0 {
 		return

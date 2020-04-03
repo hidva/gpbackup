@@ -19,6 +19,7 @@ import (
  * Structs and functions relating to generic metadata handling.
  */
 
+// 参见 gpbackup 对 object 管理了解该类的背景.
 type MetadataQueryParams struct {
 	NameField    string
 	SchemaField  string
@@ -120,6 +121,8 @@ type MetadataQueryStruct struct {
 	SecurityLabelProvider string
 }
 
+// 用来获取 params 指定类型所有 object. 比如如果 params 为 TYPE_FUNCTION, 则用来获取系统中所有 function object.
+// 参见 'gpbackup 对 object 管理.' 了解相关背景.
 func GetMetadataForObjectType(connectionPool *dbconn.DBConn, params MetadataQueryParams) MetadataMap {
 	gplog.Verbose("Getting object type metadata from " + params.CatalogTable)
 

@@ -56,6 +56,7 @@ func createAlteredPartitionSchemaSet(tables []Table) map[string]bool {
 	return partitionAlteredSchemas
 }
 
+// 存放着表相关的元信息.
 type TableDefinition struct {
 	DistPolicy         string
 	PartDef            string
@@ -63,17 +64,19 @@ type TableDefinition struct {
 	StorageOpts        string
 	TablespaceName     string
 	ColumnDefs         []ColumnDefinition
-	IsExternal         bool
+	IsExternal         bool // 若为 true, 则表明当前表是 external table, 此时 ExternalTableDefinition 中存放相应信息.
 	ExtTableDef        ExternalTableDefinition
-	PartitionLevelInfo PartitionLevelInfo
+	PartitionLevelInfo PartitionLevelInfo // 若这里 PartitionLevelInfo 中字段全为 zero value, 则当前表不是分区表.
 	TableType          string
 	IsUnlogged         bool
-	ForeignDef         ForeignTableDefinition
+	ForeignDef         ForeignTableDefinition // 若 ForeignDef 中值不全为 zero value, 则表明当前表为外表.
 	Inherits           []string
 	ReplicaIdentity    string
+
 	PartitionAlteredSchemas []AlteredPartitionRelation
 }
 
+// 为 tableRelations 中每一个表构造对应的 Table 结构. 这其中涉及到大量的元信息访问.
 /*
  * This function calls all the functions needed to gather the metadata for a
  * single table and assembles the metadata into ColumnDef and TableDef structs
@@ -100,20 +103,20 @@ func ConstructDefinitionsForTables(connectionPool *dbconn.DBConn, tableRelations
 	for _, tableRel := range tableRelations {
 		oid := tableRel.Oid
 		tableDef := TableDefinition{
-			DistPolicy:         distributionPolicies[oid],
-			PartDef:            partitionDefs[oid],
-			PartTemplateDef:    partTemplateDefs[oid],
-			StorageOpts:        storageOptions[oid],
-			TablespaceName:     tablespaceNames[oid],
-			ColumnDefs:         columnDefs[oid],
-			IsExternal:         extTableDefs[oid].Oid != 0,
-			ExtTableDef:        extTableDefs[oid],
-			PartitionLevelInfo: partTableMap[oid],
-			TableType:          tableTypeMap[oid],
-			IsUnlogged:         unloggedTableMap[oid],
-			ForeignDef:         foreignTableDefs[oid],
-			Inherits:           inheritanceMap[oid],
-			ReplicaIdentity:    replicaIdentityMap[oid],
+			DistPolicy:              distributionPolicies[oid],
+			PartDef:                 partitionDefs[oid],
+			PartTemplateDef:         partTemplateDefs[oid],
+			StorageOpts:             storageOptions[oid],
+			TablespaceName:          tablespaceNames[oid],
+			ColumnDefs:              columnDefs[oid],
+			IsExternal:              extTableDefs[oid].Oid != 0,
+			ExtTableDef:             extTableDefs[oid],
+			PartitionLevelInfo:      partTableMap[oid],
+			TableType:               tableTypeMap[oid],
+			IsUnlogged:              unloggedTableMap[oid],
+			ForeignDef:              foreignTableDefs[oid],
+			Inherits:                inheritanceMap[oid],
+			ReplicaIdentity:         replicaIdentityMap[oid],
 			PartitionAlteredSchemas: partitionAlteredSchemaMap[oid],
 		}
 		if tableDef.Inherits == nil {
@@ -130,9 +133,10 @@ func ConstructDefinitionsForTables(connectionPool *dbconn.DBConn, tableRelations
  * an intermediate table.
  */
 
+// 分区表树中每一个节点都对应着一个 PartitionLevelInfo 结构描述着相关信息.
 type PartitionLevelInfo struct {
 	Oid      uint32
-	Level    string
+	Level    string // 'p' 表明根表; 'l', 表明叶子节点; 'i', 表明中间节点.
 	RootName string
 }
 
@@ -166,6 +170,7 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 	return resultMap
 }
 
+// 该类字段语义参考 GetColumnDefinitions() 函数实现即可.
 type ColumnDefinition struct {
 	Oid                   uint32 `db:"attrelid"`
 	Num                   int    `db:"attnum"`
@@ -194,6 +199,7 @@ var storageTypeCodes = map[string]string{
 	"x": "EXTENDED",
 }
 
+// 返回 map 中, key 为 table oid. value 为表列定义集合.
 func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefinition {
 	// This query is adapted from the getTableAttrs() function in pg_dump.c.
 	// Optimize Get column definitions to avoid child partitions
@@ -221,16 +227,19 @@ func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefi
 		LEFT JOIN pg_catalog.pg_attribute_encoding e ON e.attrelid = a.attrelid AND e.attnum = a.attnum
 		LEFT JOIN pg_description d ON d.objoid = a.attrelid AND d.classoid = 'pg_class'::regclass AND d.objsubid = a.attnum`
 	whereClause := `
-	WHERE ` + relationAndSchemaFilterClause() + `
+	WHERE ` + relationAndSchemaFilterClause() + `  -- namespace 过滤
+		-- 如果 c.oid 是分区表中间节点表, 那么它的所有列都不会展示出来.
+		-- 如果 c.oid 是分区表叶子节点非外表, 那么它的所有列都不会展示出来.
 		AND NOT EXISTS (SELECT 1 FROM 
 			(SELECT parchildrelid FROM pg_partition_rule EXCEPT SELECT reloid FROM pg_exttable)
 			par WHERE par.parchildrelid = c.oid)
-		AND c.reltype <> 0
-		AND a.attnum > 0::pg_catalog.int2
-		AND a.attisdropped = 'f'
+		AND c.reltype <> 0  -- c.reltype = 0 意味着 c 为 index, 
+		AND a.attnum > 0::pg_catalog.int2  -- 只需要用户定义列.
+		AND a.attisdropped = 'f'  -- 列未被用户删除.
 	ORDER BY a.attrelid, a.attnum`
 
 	if connectionPool.Version.AtLeast("6") {
+		// 加入了额外的列, 以及为了这些额外列所需要 JOIN 的表.
 		selectClause += `,
 		CASE
 			WHEN a.attacl IS NULL THEN NULL
@@ -339,9 +348,9 @@ func GetPartitionDetails(connectionPool *dbconn.DBConn) (map[uint32]string, map[
 }
 
 type AlteredPartitionRelation struct {
-	OldSchema	string
-	NewSchema	string
-	Name		string
+	OldSchema string
+	NewSchema string
+	Name      string
 }
 
 /*
@@ -365,7 +374,7 @@ func GetPartitionAlteredSchema(connectionPool *dbconn.DBConn) map[uint32][]Alter
 		JOIN pg_catalog.pg_namespace pgn2 ON pgc2.relnamespace = pgn2.oid
 	WHERE pgc.relnamespace != pgc2.relnamespace`)
 	var results []struct {
-		Oid	uint32
+		Oid uint32
 		AlteredPartitionRelation
 	}
 	err := connectionPool.Select(&results, query)
@@ -482,7 +491,7 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 		JOIN pg_namespace n ON p.relnamespace = n.oid
 	WHERE %s%s
 	ORDER BY i.inhrelid, i.inhseqno`,
-	ExtensionFilterClause("p"), tableFilterStr)
+		ExtensionFilterClause("p"), tableFilterStr)
 
 	results := make([]Dependency, 0)
 	resultMap := make(map[uint32][]string)

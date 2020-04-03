@@ -16,6 +16,10 @@ import (
 	"github.com/greenplum-db/gpbackup/utils"
 )
 
+// 将 tables 中的表分为两类:
+// metadataTables, 此时只会备份表的 DDL.
+// dataTables, 此时只会备份表的数据.
+// includeList, 我理解应该是用户通过 --include-table 指定的表列表吧.
 /*
  * When leafPartitionData is set, for partition tables we want to print metadata
  * for the parent tables and data for the leaf tables, so we split them into
@@ -289,9 +293,9 @@ func PrintAlterSequenceStatements(metadataFile *utils.FileWithByteCount,
 			start := metadataFile.ByteCount
 			metadataFile.MustPrintf("\n\nALTER SEQUENCE %s OWNED BY %s;\n", seqFQN, sequence.OwningColumn)
 			entry := toc.MetadataEntry{
-				Schema: sequence.Relation.Schema,
-				Name: sequence.Relation.Name,
-				ObjectType: "SEQUENCE OWNER",
+				Schema:          sequence.Relation.Schema,
+				Name:            sequence.Relation.Name,
+				ObjectType:      "SEQUENCE OWNER",
 				ReferenceObject: sequence.OwningTable,
 			}
 			tocfile.AddMetadataEntry("predata", entry, start, metadataFile.ByteCount)

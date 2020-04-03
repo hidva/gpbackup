@@ -37,7 +37,7 @@ var (
 	wasTerminated        bool
 	backupLockFile       lockfile.Lockfile
 	filterRelationClause string
-	quotedRoleNames      map[string]string
+	quotedRoleNames      map[string]string // 参见 getQuotedRoleNames 函数了解语义.
 	/*
 	 * Used for synchronizing DoCleanup.  In DoInit() we increment the group
 	 * and then wait for at least one DoCleanup to finish, either in DoTeardown

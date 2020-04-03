@@ -2,6 +2,10 @@ package backup
 
 import (
 	"fmt"
+	"reflect"
+
+	"path"
+
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
@@ -11,8 +15,6 @@ import (
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/nightlyone/lockfile"
 	"github.com/pkg/errors"
-	"path"
-	"reflect"
 )
 
 /*
@@ -229,6 +231,7 @@ func retrieveAndBackupSequences(metadataFile *utils.FileWithByteCount,
 	return sequences
 }
 
+// 获取 ExternalProtocols 相关信息.
 func retrieveProtocols(sortables *[]Sortable, metadataMap MetadataMap) []ExternalProtocol {
 	gplog.Verbose("Retrieving protocols")
 	protocols := GetExternalProtocols(connectionPool)

@@ -60,6 +60,7 @@ func DoSetup() {
 	globalCluster = cluster.NewCluster(segConfig)
 	segPrefix := filepath.GetSegPrefix(connectionPool)
 	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, segPrefix)
+	// 很显然 METADATA_ONLY 时, 不需要再在 segment 上创建 backupdir 了.
 	if MustGetFlagBool(options.METADATA_ONLY) {
 		_, err = globalCluster.ExecuteLocalCommand(fmt.Sprintf("mkdir -p %s", globalFPInfo.GetDirForContent(-1)))
 		gplog.FatalOnError(err)
@@ -195,6 +196,7 @@ func backupGlobals(metadataFile *utils.FileWithByteCount) {
 	logCompletionMessage("Global database metadata backup")
 }
 
+// 备份 pre-data object, 如 CREATE TABLE 这类 ddl 等.
 func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableOnly bool) {
 	if wasTerminated {
 		return
@@ -308,6 +310,7 @@ func backupStatistics(tables []Table) {
 	logCompletionMessage("Query planner statistics backup")
 }
 
+// 参见该函数调用位置, 也即 gpbackup.go 中 main 函数, 了解该函数语义.
 func DoTeardown() {
 	backupFailed := false
 	defer func() {

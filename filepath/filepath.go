@@ -22,7 +22,7 @@ import (
 
 type FilePathInfo struct {
 	PID                    int
-	SegDirMap              map[int]string
+	SegDirMap              map[int]string // key 为 content id. value 为 segment data dir.
 	Timestamp              string
 	UserSpecifiedBackupDir string
 	UserSpecifiedSegPrefix string
@@ -55,6 +55,7 @@ func (backupFPInfo *FilePathInfo) IsUserSpecifiedBackupDir() bool {
 	return backupFPInfo.UserSpecifiedBackupDir != ""
 }
 
+// 获取 contentid 指定 segment 要使用的备份目录.
 func (backupFPInfo *FilePathInfo) GetDirForContent(contentID int) string {
 	if backupFPInfo.IsUserSpecifiedBackupDir() {
 		segDir := fmt.Sprintf("%s%d", backupFPInfo.UserSpecifiedSegPrefix, contentID)
@@ -174,6 +175,8 @@ func (backupFPInfo *FilePathInfo) GetHelperLogPath() string {
  * Helper functions
  */
 
+// segprefix 是 GP 的一个概念, GP 认为 segment/master datadir 总是在 ${segpreix}${contentid} 中.
+// 因此这里会获取 master data directory, 然后去掉 '-1' 后缀.
 func GetSegPrefix(connectionPool *dbconn.DBConn) string {
 	query := ""
 	if connectionPool.Version.Before("6") {

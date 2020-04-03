@@ -38,6 +38,7 @@ func relationAndSchemaFilterClause() string {
 	return filterRelationClause
 }
 
+// 与 options.go 中 getOidsFromRelationList 冲突了.
 func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
 	relList := utils.SliceToQuotedString(quotedIncludeRelations)
 	query := fmt.Sprintf(`

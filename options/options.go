@@ -17,7 +17,7 @@ import (
 type Options struct {
 	IncludedRelations         []string
 	ExcludedRelations         []string
-	isLeafPartitionData       bool
+	isLeafPartitionData       bool // 指定了用户是否使用了 --leaf-partition-data
 	ExcludedSchemas           []string
 	IncludedSchemas           []string
 	originalIncludedRelations []string
@@ -200,6 +200,10 @@ func SeparateSchemaAndTable(tableNames []string) ([]FqnStruct, error) {
 	return fqnSlice, nil
 }
 
+/* 若用户未使用 --include-table 或者类似选项指定了待备份的表列表, 那么该函数 noop.
+ * 否则会使用 getUserTableRelationsWithIncludeFiltering 函数, 并将该函数返回值也通过 --include-table 选项添加到待备份表列表中.
+ * 其实若用户在 include table 指定表列表未涉及到分区表时, 该函数也是 noop 的.
+ */
 func (o *Options) ExpandIncludesForPartitions(conn *dbconn.DBConn, flags *pflag.FlagSet) error {
 	if len(o.GetIncludedTables()) == 0 {
 		return nil
@@ -256,6 +260,7 @@ func (o *Options) QuoteIncludeRelations(conn *dbconn.DBConn) error {
 	return nil
 }
 
+// 获取满足指定条件下用户表列表. 条件参考 SQL 内注释.
 func (o Options) getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) ([]FqnStruct, error) {
 	includeOids, err := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
 	if err != nil {
@@ -269,7 +274,7 @@ func (o Options) getUserTableRelationsWithIncludeFiltering(connectionPool *dbcon
 		childPartitionFilter = fmt.Sprintf(`
 	OR c.oid IN (
 		SELECT
-			r.parchildrelid
+			r.parchildrelid  -- 获取所有以 oidStr 为根节点分区表树中所有中间/叶子节点的表 oid.
 		FROM pg_partition p
 		JOIN pg_partition_rule r ON p.oid = r.paroid
 		WHERE p.paristemplate = false
@@ -295,20 +300,22 @@ SELECT
 FROM pg_class c
 JOIN pg_namespace n
 	ON c.relnamespace = n.oid
-WHERE %s
+WHERE %s  -- o.schemaFilterClause("n"), 表 schema 要满足指定要求.
 AND (
-	-- Get tables in the include list
-	c.oid IN (%s)
-	-- Get parent partition tables whose children are in the include list
+	-- Get tables in the include list,
+	c.oid IN (%s)  -- oidStr
+	-- Get parent partition tables whose children are in the include list.
+	-- 若 includedRelationsQuoted 中存在表是某个分区表树成员之一, 则要返回该分区表树根节点.
 	OR c.oid IN (
 		SELECT
 			p.parrelid
 		FROM pg_partition p
 		JOIN pg_partition_rule r ON p.oid = r.paroid
 		WHERE p.paristemplate = false
-		AND r.parchildrelid IN (%s)
+		AND r.parchildrelid IN (%s) -- oidStr
 	)
-	-- Get external partition tables whose siblings are in the include list
+	-- Get external partition tables whose siblings are in the include list.
+	-- 对于一个出现在分区表树的外表, 若其兄弟节点在 includedRelationsQuoted 中, 则同时返回该外表.
 	OR c.oid IN (
 		SELECT
 			r.parchildrelid
@@ -318,13 +325,13 @@ AND (
 			SELECT
 				pr.paroid
 			FROM pg_partition_rule pr
-			WHERE pr.parchildrelid IN (%s)
+			WHERE pr.parchildrelid IN (%s)  -- oidStr
 		)
 	)
-	%s
+	%s -- childPartitionFilter, 获取所有以 oidStr 为根节点分区表树中所有中间/叶子节点的表 oid.
 )
 AND (relkind = 'r' OR relkind = 'f')
-AND %s
+AND %s  -- ExtensionFilterClause("c"), 表不在任何 extension 中. 
 ORDER BY c.oid;`, o.schemaFilterClause("n"), oidStr, oidStr, oidStr, childPartitionFilter, ExtensionFilterClause("c"))
 
 	results := make([]FqnStruct, 0)
@@ -333,6 +340,7 @@ ORDER BY c.oid;`, o.schemaFilterClause("n"), oidStr, oidStr, oidStr, childPartit
 	return results, err
 }
 
+// 如果 quotedRelationNames 不为空, 则语义很显然. 而且在所有调用场景中, quotedRelationNames 总不为空.
 func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedRelationNames []string) ([]string, error) {
 	relList := utils.SliceToQuotedString(quotedRelationNames)
 	query := fmt.Sprintf(`
@@ -346,6 +354,10 @@ WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)`, relList)
 }
 
 // A list of schemas we don't want to back up, formatted for use in a WHERE clause
+/* 生成用于 schema 过滤的 where clause. 这里过滤依赖用户指定的 --include-schema, --exclude-schema 选项, 同时也会过滤掉
+ * 一些系统 schema.
+ * namespace; pg_namespace 系统表在查询中的 alias.
+ */
 func (o Options) schemaFilterClause(namespace string) string {
 	schemaFilterClauseStr := ""
 	if len(o.GetIncludedSchemas()) > 0 {
@@ -357,6 +369,8 @@ func (o Options) schemaFilterClause(namespace string) string {
 	return fmt.Sprintf(`%s.nspname NOT LIKE 'pg_temp_%%' AND %s.nspname NOT LIKE 'pg_toast%%' AND %s.nspname NOT IN ('gp_toolkit', 'information_schema', 'pg_aoseg', 'pg_bitmapindex', 'pg_catalog') %s`, namespace, namespace, namespace, schemaFilterClauseStr)
 }
 
+// 生成过滤掉 extension member 的 where clause.
+// 若 namespace 不为空, 则指定了 oid 列所属表的 alias.
 func ExtensionFilterClause(namespace string) string {
 	oidStr := "oid"
 	if namespace != "" {

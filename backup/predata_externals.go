@@ -28,6 +28,7 @@ const (
 	S3
 )
 
+// ExternalTableDefinition, 存放着一个 external table 相关元信息.
 type ExternalTableDefinition struct {
 	Oid             uint32
 	Type            int
@@ -340,6 +341,8 @@ func PrintCreateExternalProtocolStatement(metadataFile *utils.FileWithByteCount,
 	PrintObjectMetadata(metadataFile, toc, protoMetadata, protocol, "")
 }
 
+// 该函数为 extPartitions 中每一个外表生成对应的 EXCHANGE PARTITION 信息.
+// 这里 extPartitions,partInfoMap 对应着 GetExternalPartitionInfo() 返回值.
 func PrintExchangeExternalPartitionStatements(metadataFile *utils.FileWithByteCount, toc *toc.TOC, extPartitions []PartitionInfo, partInfoMap map[uint32]PartitionInfo, tables []Table) {
 	tableNameMap := make(map[uint32]string, len(tables))
 	for _, table := range tables {
@@ -352,6 +355,7 @@ func PrintExchangeExternalPartitionStatements(metadataFile *utils.FileWithByteCo
 		}
 		parentRelationName := utils.MakeFQN(externalPartition.ParentSchema, externalPartition.ParentRelationName)
 		start := metadataFile.ByteCount
+		// 构造从根表到指定叶子外表的路径.
 		alterPartitionStr := ""
 		currentPartition := externalPartition
 		for currentPartition.PartitionParentRuleOid != 0 {

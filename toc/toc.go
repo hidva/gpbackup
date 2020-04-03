@@ -11,6 +11,14 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// toc entry; gpbackup 与 pg_dump 一样, 也是将待备份的东西标识为 toc. 在 gpbackup 中,
+// 所有备份的对象都对应着一个 toc entry, 即 MetadataEntry, entry 中存放的信息可用来确定当前对象
+// restore 所需要的语句在备份结果中的位置. 比如所有表 DDL 都存在 metadata.sql 中,
+// 表对应 MetadataEntry 通过 [StartByte, EndByte) 来表示着 DDL 在 metadata.sql 中的位置.
+
+// toc entry section; 具有相同性质的 toc entry 会被归结为一类, 目前 gpbackup 将 toc entry 分为
+// predata, postdata 等共 4 类.
+
 type TOC struct {
 	metadataEntryMap    map[string]*[]MetadataEntry
 	GlobalEntries       []MetadataEntry

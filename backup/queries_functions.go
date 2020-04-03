@@ -16,11 +16,12 @@ import (
 	"github.com/greenplum-db/gpbackup/utils"
 )
 
+// 很显然, 存放着一个函数相关信息.
 type Function struct {
 	Oid               uint32
 	Schema            string
 	Name              string
-	ReturnsSet        bool    `db:"proretset"`
+	ReturnsSet        bool `db:"proretset"`
 	FunctionBody      string
 	BinaryPath        string
 	Arguments         string
@@ -35,8 +36,8 @@ type Function struct {
 	NumRows           float32 `db:"prorows"`
 	DataAccess        string  `db:"prodataaccess"`
 	Language          string
-	IsWindow          bool    `db:"proiswindow"`
-	ExecLocation      string  `db:"proexeclocation"`
+	IsWindow          bool   `db:"proiswindow"`
+	ExecLocation      string `db:"proexeclocation"`
 }
 
 func (f Function) GetMetadataEntry() (string, toc.MetadataEntry) {
@@ -93,6 +94,7 @@ func GetFunctionsAllVersions(connectionPool *dbconn.DBConn) []Function {
 	return functions
 }
 
+// 获取系统中满足条件的所有函数, 具体条件要求参考代码中注释.
 func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 	excludeImplicitFunctionsClause := ""
 	masterAtts := "'a' AS proexeclocation,"
@@ -128,9 +130,9 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 	FROM pg_proc p
 		JOIN pg_catalog.pg_language l ON p.prolang = l.oid
 		LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
-	WHERE %s
-		AND proisagg = 'f'
-		AND %s%s
+	WHERE %s  -- 过滤掉所有 schema name 不符合要求的 function.
+		AND proisagg = 'f' 
+		AND %s%s -- 过滤掉所有在 extension 的 function, 以及 implicitly created functions.
 	ORDER BY nspname, proname, identargs`, masterAtts,
 		SchemaFilterClause("n"),
 		ExtensionFilterClause("p"),
@@ -146,6 +148,7 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 	return results
 }
 
+// proconfig 最多只允许有 1 条 SET x = y 表示. 所以这里正则没啥问题.
 func PostProcessFunctionConfigs(allFunctions []Function) error {
 	setToNameValuePattern := regexp.MustCompile(`^SET (.*) TO (.*)$`)
 
@@ -336,7 +339,7 @@ type Aggregate struct {
 	SortOperatorSchema         string
 	Hypothetical               bool
 	TransitionDataType         string
-	TransitionDataSize         int    `db:"aggtransspace"`
+	TransitionDataSize         int `db:"aggtransspace"`
 	InitialValue               string
 	InitValIsNull              bool
 	IsOrdered                  bool   `db:"aggordered"`
@@ -491,6 +494,7 @@ func GetAggregates(connectionPool *dbconn.DBConn) []Aggregate {
 	return aggregates
 }
 
+// FunctionInfo, 描述了一个 function object 相关信息. 参考 GetFunctionOidToInfoMap 函数了解各个字段语义.
 type FunctionInfo struct {
 	Oid           uint32
 	Name          string
@@ -518,6 +522,7 @@ func (info FunctionInfo) GetMetadataEntry() (string, toc.MetadataEntry) {
 		}
 }
 
+// 获取系统中所有 function object, 返回 map 中 key 为 oid. 如 query 所示, 此时未带有任何 WHERE 条件.
 func GetFunctionOidToInfoMap(connectionPool *dbconn.DBConn) map[uint32]FunctionInfo {
 	version4query := `
 	SELECT p.oid,

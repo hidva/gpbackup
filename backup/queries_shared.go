@@ -72,15 +72,15 @@ func GetAllUserSchemas(connectionPool *dbconn.DBConn, partitionAlteredSchemas ma
 }
 
 type Constraint struct {
-	Oid                uint32
-	Schema             string
-	Name               string
-	ConType            string
-	ConDef             string
-	ConIsLocal         bool
-	OwningObject       string
-	IsDomainConstraint bool
-	IsPartitionParent  bool
+	Oid                uint32 // 约束 oid.
+	Schema             string // 约束所在 schema
+	Name               string // 约束名
+	ConType            string // 约束类型
+	ConDef             string // 约束定义, 即 pg_get_constraintdef()
+	ConIsLocal         bool   // conislocal 属性
+	OwningObject       string // 约束所作用的对象, 若 domain constraint, 则类型名. 否则表名.
+	IsDomainConstraint bool   // 为 true, 则表明是 domain constraint. 否则是 table constraint
+	IsPartitionParent  bool   // 为 true, 则表明约束是 table constraint, 同时约束所在表为某个分区表根节点表.
 }
 
 func (c Constraint) GetMetadataEntry() (string, toc.MetadataEntry) {
@@ -107,6 +107,7 @@ func (c Constraint) FQN() string {
 	return c.Name
 }
 
+// 获取所有的约束. 主要看下面两个 SQL 就行.
 func GetConstraints(connectionPool *dbconn.DBConn, includeTables ...Relation) []Constraint {
 	// ConIsLocal should always return true from GetConstraints because we filter out constraints that are inherited using the INHERITS clause, or inherited from a parent partition table. This field only accurately reflects constraints in GPDB6+ because check constraints on parent tables must propogate to children. For GPDB versions 5 or lower, this field will default to false.
 	var selectConIsLocal string
@@ -116,36 +117,40 @@ func GetConstraints(connectionPool *dbconn.DBConn, includeTables ...Relation) []
 		groupByConIsLocal = `con.conislocal,`
 	}
 	// This query is adapted from the queries underlying \d in psql.
+	// 用来查询所有的 table constraint.
+	// 这里并不会返回在分区表中间节点/叶子节点上的约束.
 	tableQuery := fmt.Sprintf(`
 	SELECT con.oid,
-		quote_ident(n.nspname) AS schema,
-		quote_ident(conname) AS name,
+		quote_ident(n.nspname) AS schema,  -- 约束所在 schema
+		quote_ident(conname) AS name, 
 		contype,
-		%s
+		%s  -- conislocal
 		pg_get_constraintdef(con.oid, TRUE) AS condef,
-		quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS owningobject,
+		quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS owningobject,  -- 约束所在表名.
 		'f' AS isdomainconstraint,
 		CASE
 			WHEN pt.parrelid IS NULL THEN 'f'
 			ELSE 't'
-		END AS ispartitionparent
+		END AS ispartitionparent -- 若为 true, 约束所在表为某个分区表根表.
 	FROM pg_constraint con
 		LEFT JOIN pg_class c ON con.conrelid = c.oid
 		LEFT JOIN pg_partition pt ON con.conrelid = pt.parrelid
 		JOIN pg_namespace n ON n.oid = con.connamespace
-	WHERE %s
-		AND %s
+	WHERE %s  -- relationAndSchemaFilterClause()
+		AND %s  -- ExtensionFilterClause("c")
 		AND c.relname IS NOT NULL
-		AND conrelid NOT IN (SELECT parchildrelid FROM pg_partition_rule)
+		AND conrelid NOT IN (SELECT parchildrelid FROM pg_partition_rule)  
+		-- 等同于 coninhcount == 0
 		AND (conrelid, conname) NOT IN (SELECT i.inhrelid, con.conname FROM pg_inherits i JOIN pg_constraint con ON i.inhrelid = con.conrelid JOIN pg_constraint p ON i.inhparent = p.conrelid WHERE con.conname = p.conname)
-	GROUP BY con.oid, conname, contype, c.relname, n.nspname, %s pt.parrelid`, selectConIsLocal, "%s", ExtensionFilterClause("c"), groupByConIsLocal)
+	GROUP BY con.oid, conname, contype, c.relname, n.nspname, %s pt.parrelid -- con.conislocal,`, selectConIsLocal, "%s", ExtensionFilterClause("c"), groupByConIsLocal)
 
+	// 用来查找所有的 domain constraint
 	nonTableQuery := fmt.Sprintf(`
 	SELECT con.oid,
 		quote_ident(n.nspname) AS schema,
 		quote_ident(conname) AS name,
 		contype,
-		%s
+		%s  -- conislocal
 		pg_get_constraintdef(con.oid, TRUE) AS condef,
 		quote_ident(n.nspname) || '.' || quote_ident(t.typname) AS owningobject,
 		't' AS isdomainconstraint,
@@ -153,10 +158,10 @@ func GetConstraints(connectionPool *dbconn.DBConn, includeTables ...Relation) []
 	FROM pg_constraint con
 		LEFT JOIN pg_type t ON con.contypid = t.oid
 		JOIN pg_namespace n ON n.oid = con.connamespace
-	WHERE %s
-		AND %s
+	WHERE %s  -- SchemaFilterClause("n")
+		AND %s  -- ExtensionFilterClause("con")
 		AND t.typname IS NOT NULL
-	GROUP BY con.oid, conname, contype, n.nspname, %s t.typname
+	GROUP BY con.oid, conname, contype, n.nspname, %s t.typname  -- con.conislocal,
 	ORDER BY name`, selectConIsLocal, SchemaFilterClause("n"), ExtensionFilterClause("con"), groupByConIsLocal)
 
 	query := ""
